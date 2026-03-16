@@ -8,6 +8,9 @@ import { DIFFICULTY_COLORS, REGION_BOUNDS } from "@/lib/types";
 
 interface MapProps {
   onTrailClick?: (slug: string) => void;
+  onTrailHover?: (slug: string | null) => void;
+  onBoundsChange?: (bounds: maplibregl.LngLatBounds) => void;
+  hoveredTrail?: string | null;
   highlightTrail?: string | null;
   interactive?: boolean;
   className?: string;
@@ -17,6 +20,9 @@ const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY || "get_a_free_key";
 
 export default function Map({
   onTrailClick,
+  onTrailHover,
+  onBoundsChange,
+  hoveredTrail,
   highlightTrail,
   interactive = true,
   className = "",
@@ -26,10 +32,13 @@ export default function Map({
   const [loaded, setLoaded] = useState(false);
   const [activeLayer, setActiveLayer] = useState<string>("dark");
 
+  // Track which slug is active (hover or highlight)
+  const activeSlug = hoveredTrail || highlightTrail || "";
+
   const layers = [
-    { id: "dark", name: "Dark", icon: "M" },
-    { id: "topo", name: "Topo", icon: "T" },
-    { id: "satellite", name: "Satellite", icon: "S" },
+    { id: "dark", name: "Dark" },
+    { id: "topo", name: "Topo" },
+    { id: "satellite", name: "Satellite" },
   ];
 
   const getStyleUrl = useCallback((layerId: string) => {
@@ -56,77 +65,69 @@ export default function Map({
         });
       }
 
+      if (!mapInstance.getLayer("trails-glow")) {
+        mapInstance.addLayer({
+          id: "trails-glow",
+          type: "line",
+          source: "trails",
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: {
+            "line-color": [
+              "match",
+              ["get", "difficulty"],
+              "easy", DIFFICULTY_COLORS.easy,
+              "moderate", DIFFICULTY_COLORS.moderate,
+              "hard", DIFFICULTY_COLORS.hard,
+              "expert", DIFFICULTY_COLORS.expert,
+              "#3b82f6",
+            ],
+            "line-width": [
+              "case",
+              ["==", ["get", "slug"], activeSlug],
+              14,
+              8,
+            ],
+            "line-opacity": [
+              "case",
+              ["==", ["get", "slug"], activeSlug],
+              0.3,
+              0.1,
+            ],
+            "line-blur": 4,
+          },
+        });
+      }
+
       if (!mapInstance.getLayer("trails-line")) {
         mapInstance.addLayer({
           id: "trails-line",
           type: "line",
           source: "trails",
-          layout: {
-            "line-join": "round",
-            "line-cap": "round",
-          },
+          layout: { "line-join": "round", "line-cap": "round" },
           paint: {
             "line-color": [
               "match",
               ["get", "difficulty"],
-              "easy",
-              DIFFICULTY_COLORS.easy,
-              "moderate",
-              DIFFICULTY_COLORS.moderate,
-              "hard",
-              DIFFICULTY_COLORS.hard,
-              "expert",
-              DIFFICULTY_COLORS.expert,
+              "easy", DIFFICULTY_COLORS.easy,
+              "moderate", DIFFICULTY_COLORS.moderate,
+              "hard", DIFFICULTY_COLORS.hard,
+              "expert", DIFFICULTY_COLORS.expert,
               "#3b82f6",
             ],
             "line-width": [
               "case",
-              ["==", ["get", "slug"], highlightTrail || ""],
+              ["==", ["get", "slug"], activeSlug],
               5,
-              3,
+              2.5,
             ],
             "line-opacity": [
               "case",
-              ["==", ["get", "slug"], highlightTrail || ""],
+              ["==", ["get", "slug"], activeSlug],
               1,
-              0.7,
+              0.6,
             ],
           },
         });
-      }
-
-      // Trail glow effect
-      if (!mapInstance.getLayer("trails-glow")) {
-        mapInstance.addLayer(
-          {
-            id: "trails-glow",
-            type: "line",
-            source: "trails",
-            layout: {
-              "line-join": "round",
-              "line-cap": "round",
-            },
-            paint: {
-              "line-color": [
-                "match",
-                ["get", "difficulty"],
-                "easy",
-                DIFFICULTY_COLORS.easy,
-                "moderate",
-                DIFFICULTY_COLORS.moderate,
-                "hard",
-                DIFFICULTY_COLORS.hard,
-                "expert",
-                DIFFICULTY_COLORS.expert,
-                "#3b82f6",
-              ],
-              "line-width": 8,
-              "line-opacity": 0.15,
-              "line-blur": 4,
-            },
-          },
-          "trails-line"
-        );
       }
 
       // Trailhead points
@@ -145,25 +146,33 @@ export default function Map({
           paint: {
             "circle-radius": [
               "case",
+              ["==", ["get", "slug"], activeSlug],
+              9,
               ["==", ["get", "passport_peak"], true],
-              7,
-              5,
+              6,
+              4.5,
             ],
             "circle-color": [
               "match",
               ["get", "difficulty"],
-              "easy",
-              DIFFICULTY_COLORS.easy,
-              "moderate",
-              DIFFICULTY_COLORS.moderate,
-              "hard",
-              DIFFICULTY_COLORS.hard,
-              "expert",
-              DIFFICULTY_COLORS.expert,
+              "easy", DIFFICULTY_COLORS.easy,
+              "moderate", DIFFICULTY_COLORS.moderate,
+              "hard", DIFFICULTY_COLORS.hard,
+              "expert", DIFFICULTY_COLORS.expert,
               "#3b82f6",
             ],
-            "circle-stroke-width": 2,
-            "circle-stroke-color": "#050505",
+            "circle-stroke-width": [
+              "case",
+              ["==", ["get", "slug"], activeSlug],
+              3,
+              2,
+            ],
+            "circle-stroke-color": [
+              "case",
+              ["==", ["get", "slug"], activeSlug],
+              "#ffffff",
+              "#050505",
+            ],
           },
         });
       }
@@ -189,20 +198,31 @@ export default function Map({
         });
       }
 
-      // Click handlers
-      mapInstance.on("click", "trailheads-circle", (e) => {
+      // Click on trail line or trailhead
+      const handleClick = (e: maplibregl.MapLayerMouseEvent) => {
         if (e.features && e.features[0] && onTrailClick) {
           onTrailClick(e.features[0].properties.slug);
         }
-      });
+      };
+      mapInstance.on("click", "trailheads-circle", handleClick);
+      mapInstance.on("click", "trails-line", handleClick);
 
-      mapInstance.on("mouseenter", "trailheads-circle", () => {
+      // Hover on trail line or trailhead → notify parent
+      const handleHoverEnter = (e: maplibregl.MapLayerMouseEvent) => {
         mapInstance.getCanvas().style.cursor = "pointer";
-      });
-
-      mapInstance.on("mouseleave", "trailheads-circle", () => {
+        if (e.features && e.features[0] && onTrailHover) {
+          onTrailHover(e.features[0].properties.slug);
+        }
+      };
+      const handleHoverLeave = () => {
         mapInstance.getCanvas().style.cursor = "";
-      });
+        if (onTrailHover) onTrailHover(null);
+      };
+
+      mapInstance.on("mouseenter", "trailheads-circle", handleHoverEnter);
+      mapInstance.on("mouseenter", "trails-line", handleHoverEnter);
+      mapInstance.on("mouseleave", "trailheads-circle", handleHoverLeave);
+      mapInstance.on("mouseleave", "trails-line", handleHoverLeave);
 
       // Popup on hover
       const popup = new maplibregl.Popup({
@@ -216,7 +236,6 @@ export default function Map({
         const props = e.features[0].properties;
         const coords = (e.features[0].geometry as GeoJSON.Point)
           .coordinates as [number, number];
-
         popup
           .setLngLat(coords)
           .setHTML(
@@ -230,14 +249,17 @@ export default function Map({
           )
           .addTo(mapInstance);
       });
+      mapInstance.on("mouseleave", "trailheads-circle", () => popup.remove());
 
-      mapInstance.on("mouseleave", "trailheads-circle", () => {
-        popup.remove();
-      });
+      // Fire initial bounds
+      if (onBoundsChange) {
+        onBoundsChange(mapInstance.getBounds());
+      }
     },
-    [highlightTrail, onTrailClick]
+    [activeSlug, onTrailClick, onTrailHover, onBoundsChange]
   );
 
+  // Initialize map
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
 
@@ -267,15 +289,60 @@ export default function Map({
       }
     });
 
+    // Emit bounds on move
+    map.current.on("moveend", () => {
+      if (map.current && onBoundsChange) {
+        onBoundsChange(map.current.getBounds());
+      }
+    });
+
     return () => {
       if (map.current) {
         map.current.remove();
         map.current = null;
       }
     };
-  }, [interactive, getStyleUrl, addTrailLayers]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interactive]);
 
-  // Handle style switching
+  // Update highlight paint properties when hover/highlight changes
+  useEffect(() => {
+    if (!map.current || !loaded) return;
+    const m = map.current;
+
+    if (m.getLayer("trails-line")) {
+      m.setPaintProperty("trails-line", "line-width", [
+        "case", ["==", ["get", "slug"], activeSlug], 5, 2.5,
+      ]);
+      m.setPaintProperty("trails-line", "line-opacity", [
+        "case", ["==", ["get", "slug"], activeSlug], 1, 0.6,
+      ]);
+    }
+    if (m.getLayer("trails-glow")) {
+      m.setPaintProperty("trails-glow", "line-width", [
+        "case", ["==", ["get", "slug"], activeSlug], 14, 8,
+      ]);
+      m.setPaintProperty("trails-glow", "line-opacity", [
+        "case", ["==", ["get", "slug"], activeSlug], 0.3, 0.1,
+      ]);
+    }
+    if (m.getLayer("trailheads-circle")) {
+      m.setPaintProperty("trailheads-circle", "circle-radius", [
+        "case",
+        ["==", ["get", "slug"], activeSlug], 9,
+        ["==", ["get", "passport_peak"], true], 6,
+        4.5,
+      ]);
+      m.setPaintProperty("trailheads-circle", "circle-stroke-width", [
+        "case", ["==", ["get", "slug"], activeSlug], 3, 2,
+      ]);
+      m.setPaintProperty("trailheads-circle", "circle-stroke-color", [
+        "case", ["==", ["get", "slug"], activeSlug], "#ffffff", "#050505",
+      ]);
+    }
+  }, [activeSlug, loaded]);
+
+  // Style switching
   const switchLayer = useCallback(
     (layerId: string) => {
       if (!map.current || layerId === activeLayer) return;
@@ -298,30 +365,6 @@ export default function Map({
     },
     [activeLayer, getStyleUrl, addTrailLayers]
   );
-
-  // Fly to highlighted trail
-  useEffect(() => {
-    if (!map.current || !loaded || !highlightTrail) return;
-
-    const source = map.current.getSource("trails") as maplibregl.GeoJSONSource;
-    if (!source) return;
-
-    // Update the line width expression
-    if (map.current.getLayer("trails-line")) {
-      map.current.setPaintProperty("trails-line", "line-width", [
-        "case",
-        ["==", ["get", "slug"], highlightTrail],
-        5,
-        3,
-      ]);
-      map.current.setPaintProperty("trails-line", "line-opacity", [
-        "case",
-        ["==", ["get", "slug"], highlightTrail],
-        1,
-        0.7,
-      ]);
-    }
-  }, [highlightTrail, loaded]);
 
   return (
     <div className={`relative ${className}`}>

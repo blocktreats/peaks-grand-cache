@@ -1,240 +1,328 @@
+"use client";
+
+import { useState, useMemo, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { trails } from "@/data/trails";
+import { DIFFICULTY_COLORS, type Trail } from "@/lib/types";
+
+const Map = dynamic(() => import("@/components/Map"), { ssr: false });
+
+function isTrailInBounds(
+  trail: Trail,
+  bounds: { _sw: { lng: number; lat: number }; _ne: { lng: number; lat: number } } | null
+): boolean {
+  if (!bounds) return true;
+  // Check if trailhead is within bounds
+  const [lng, lat] = trail.trailhead;
+  return (
+    lng >= bounds._sw.lng &&
+    lng <= bounds._ne.lng &&
+    lat >= bounds._sw.lat &&
+    lat <= bounds._ne.lat
+  );
+}
 
 export default function Home() {
-  const passportPeaks = trails.filter((t) => t.passport_peak);
-  const featuredTrails = trails.filter((t) => !t.passport_peak).slice(0, 4);
+  const router = useRouter();
+  const [hoveredTrail, setHoveredTrail] = useState<string | null>(null);
+  const [selectedTrail, setSelectedTrail] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [mapBounds, setMapBounds] = useState<any>(null);
+  const [search, setSearch] = useState("");
+  const [difficultyFilter, setDifficultyFilter] = useState<string>("all");
+  const sidebarRef = useRef<HTMLDivElement>(null);
+
+  const visibleTrails = useMemo(() => {
+    return trails.filter((t) => {
+      if (!isTrailInBounds(t, mapBounds)) return false;
+      if (search && !t.name.toLowerCase().includes(search.toLowerCase()))
+        return false;
+      if (difficultyFilter !== "all" && t.difficulty !== difficultyFilter)
+        return false;
+      return true;
+    });
+  }, [mapBounds, search, difficultyFilter]);
+
+  const handleBoundsChange = useCallback((bounds: unknown) => {
+    setMapBounds(bounds);
+  }, []);
+
+  const handleMapTrailHover = useCallback((slug: string | null) => {
+    setHoveredTrail(slug);
+    // Scroll card into view
+    if (slug) {
+      const el = document.getElementById(`trail-card-${slug}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    }
+  }, []);
+
+  const handleCardHover = useCallback((slug: string | null) => {
+    setHoveredTrail(slug);
+  }, []);
+
+  const handleTrailClick = useCallback(
+    (slug: string) => {
+      setSelectedTrail(slug);
+      router.push(`/trails/${slug}`);
+    },
+    [router]
+  );
+
+  const selected = trails.find((t) => t.slug === selectedTrail);
 
   return (
-    <div className="min-h-screen bg-[#050505]">
-      {/* Nav */}
-      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/5 bg-[#050505]/80 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-          <Link href="/" className="flex items-center gap-2">
-            <svg
-              width="28"
-              height="28"
-              viewBox="0 0 28 28"
-              fill="none"
-              className="text-blue-500"
-            >
-              <path
-                d="M14 2L2 26h24L14 2z"
-                stroke="currentColor"
-                strokeWidth="2"
-                fill="none"
-              />
-              <path d="M14 8L8 22h12L14 8z" fill="currentColor" opacity="0.2" />
-            </svg>
-            <span className="text-lg font-semibold tracking-tight text-white">
-              Peaks
-            </span>
-          </Link>
-          <div className="flex items-center gap-8">
-            <Link
-              href="/trails"
-              className="text-sm text-neutral-400 transition hover:text-white"
-            >
-              Trails
-            </Link>
-            <Link
-              href="/map"
-              className="text-sm text-neutral-400 transition hover:text-white"
-            >
-              Map
-            </Link>
-            <Link
-              href="/map"
-              className="rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500"
-            >
-              Explore Map
-            </Link>
-          </div>
-        </div>
-      </nav>
-
-      {/* Hero */}
-      <section className="relative flex min-h-[85vh] items-center justify-center overflow-hidden pt-16">
-        {/* Gradient background */}
-        <div className="absolute inset-0">
-          <div className="absolute inset-0 bg-gradient-to-b from-blue-950/20 via-[#050505] to-[#050505]" />
-          <div className="absolute top-0 left-1/2 h-[600px] w-[800px] -translate-x-1/2 rounded-full bg-blue-500/5 blur-3xl" />
-        </div>
-
-        <div className="relative z-10 mx-auto max-w-4xl px-6 text-center">
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-sm text-neutral-300">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            {trails.length} trails in the Grand Cache region
-          </div>
-          <h1 className="mb-6 text-5xl font-bold tracking-tight text-white md:text-7xl">
-            Every peak.
-            <br />
-            <span className="bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
-              One map.
-            </span>
-          </h1>
-          <p className="mx-auto mb-10 max-w-2xl text-lg text-neutral-400">
-            Explore the trails of Grand Cache, Alberta. From the Passport to the
-            Peaks summits to riverside walks — plan your next adventure with
-            detailed maps, elevation profiles, and downloadable GPX tracks.
-          </p>
-          <div className="flex items-center justify-center gap-4">
-            <Link
-              href="/map"
-              className="group flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-black transition hover:bg-neutral-200"
-            >
-              Open Map
+    <div className="flex h-screen overflow-hidden bg-[#050505]">
+      {/* Sidebar */}
+      <div className="relative z-20 flex w-96 flex-col border-r border-white/5 bg-[#0a0a0a]">
+        {/* Header */}
+        <div className="shrink-0 border-b border-white/5 p-4">
+          <div className="mb-4 flex items-center justify-between">
+            <Link href="/" className="flex items-center gap-2.5">
               <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
+                width="26"
+                height="26"
+                viewBox="0 0 28 28"
                 fill="none"
-                className="transition group-hover:translate-x-0.5"
+                className="text-blue-500"
               >
                 <path
-                  d="M3 8h10m0 0L9 4m4 4L9 12"
+                  d="M14 2L2 26h24L14 2z"
                   stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  fill="none"
+                />
+                <path
+                  d="M14 8L8 22h12L14 8z"
+                  fill="currentColor"
+                  opacity="0.2"
                 />
               </svg>
+              <span className="text-lg font-semibold tracking-tight text-white">
+                Peaks
+              </span>
             </Link>
             <Link
               href="/trails"
-              className="rounded-full border border-white/10 bg-white/5 px-6 py-3 text-sm font-medium text-white transition hover:border-white/20 hover:bg-white/10"
+              className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-neutral-400 transition hover:bg-white/5 hover:text-white"
             >
-              Browse Trails
+              List View
             </Link>
           </div>
-        </div>
-      </section>
 
-      {/* Passport to the Peaks */}
-      <section className="mx-auto max-w-7xl px-6 py-24">
-        <div className="mb-12 flex items-end justify-between">
-          <div>
-            <span className="mb-2 block text-sm font-medium uppercase tracking-wider text-blue-400">
-              Passport to the Peaks
-            </span>
-            <h2 className="text-3xl font-bold text-white">Summit Challenges</h2>
-            <p className="mt-2 text-neutral-400">
-              The legendary 21-peak challenge of Grand Cache
-            </p>
-          </div>
-          <Link
-            href="/trails?filter=passport"
-            className="text-sm text-neutral-400 transition hover:text-white"
-          >
-            View all peaks &rarr;
-          </Link>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {passportPeaks.map((trail) => (
-            <Link
-              key={trail.slug}
-              href={`/trails/${trail.slug}`}
-              className="group relative overflow-hidden rounded-2xl border border-white/5 bg-[#111] p-6 transition hover:border-white/10 hover:bg-[#161616]"
+          {/* Search */}
+          <div className="relative mb-3">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500"
             >
-              {trail.passport_tier && (
-                <span
-                  className={`mb-3 inline-block rounded-full px-2.5 py-0.5 text-xs font-medium uppercase tracking-wide ${
-                    trail.passport_tier === "bronze"
-                      ? "bg-amber-500/10 text-amber-400"
-                      : trail.passport_tier === "silver"
-                        ? "bg-neutral-400/10 text-neutral-300"
-                        : "bg-yellow-500/10 text-yellow-400"
-                  }`}
-                >
-                  {trail.passport_tier}
-                </span>
-              )}
-              <h3 className="mb-2 text-lg font-semibold text-white transition group-hover:text-blue-400">
-                {trail.name}
-              </h3>
-              <div className="mb-3 flex items-center gap-4 text-sm text-neutral-500">
-                <span>{trail.distance_km} km</span>
-                <span>{trail.elevation_gain_m}m gain</span>
-                <span>{trail.elevation_high_m}m summit</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span
-                  className={`h-2 w-2 rounded-full ${
-                    trail.difficulty === "easy"
-                      ? "bg-emerald-400"
-                      : trail.difficulty === "moderate"
-                        ? "bg-blue-400"
-                        : trail.difficulty === "hard"
-                          ? "bg-amber-400"
-                          : "bg-red-400"
-                  }`}
-                />
-                <span className="text-sm capitalize text-neutral-400">
-                  {trail.difficulty}
-                </span>
-              </div>
-              <div className="absolute top-6 right-6 text-neutral-600 transition group-hover:text-neutral-400">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                  <path
-                    d="M5 15L15 5m0 0H8m7 0v7"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+              <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search trails..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-lg border border-white/10 bg-white/5 py-2 pl-9 pr-3 text-sm text-white placeholder-neutral-500 outline-none transition focus:border-blue-500/50"
+            />
+          </div>
+
+          {/* Filters */}
+          <div className="flex gap-1.5">
+            {["all", "easy", "moderate", "hard", "expert"].map((d) => (
+              <button
+                key={d}
+                onClick={() => setDifficultyFilter(d)}
+                className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition ${
+                  difficultyFilter === d
+                    ? "bg-white/10 text-white"
+                    : "text-neutral-500 hover:text-neutral-300"
+                }`}
+              >
+                {d !== "all" && (
+                  <span
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{
+                      backgroundColor:
+                        DIFFICULTY_COLORS[d as keyof typeof DIFFICULTY_COLORS],
+                    }}
                   />
-                </svg>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      {/* More Trails */}
-      <section className="mx-auto max-w-7xl px-6 pb-24">
-        <div className="mb-12 flex items-end justify-between">
-          <div>
-            <h2 className="text-3xl font-bold text-white">More Trails</h2>
-            <p className="mt-2 text-neutral-400">
-              Waterfalls, canyons, and riverside walks
-            </p>
+                )}
+                <span className="capitalize">{d}</span>
+              </button>
+            ))}
           </div>
-          <Link
-            href="/trails"
-            className="text-sm text-neutral-400 transition hover:text-white"
-          >
-            View all trails &rarr;
-          </Link>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {featuredTrails.map((trail) => (
-            <Link
-              key={trail.slug}
-              href={`/trails/${trail.slug}`}
-              className="group rounded-2xl border border-white/5 bg-[#111] p-5 transition hover:border-white/10 hover:bg-[#161616]"
-            >
-              <h3 className="mb-2 font-semibold text-white transition group-hover:text-blue-400">
-                {trail.name}
-              </h3>
-              <div className="flex items-center gap-3 text-sm text-neutral-500">
-                <span>{trail.distance_km} km</span>
-                <span>{trail.elevation_gain_m}m</span>
+        {/* Trail count */}
+        <div className="shrink-0 border-b border-white/5 px-4 py-2.5">
+          <span className="text-xs text-neutral-500">
+            {visibleTrails.length} trail{visibleTrails.length !== 1 ? "s" : ""}{" "}
+            in view
+          </span>
+        </div>
+
+        {/* Trail cards */}
+        <div ref={sidebarRef} className="flex-1 overflow-y-auto">
+          <div className="space-y-1 p-2">
+            {visibleTrails.map((trail) => (
+              <div
+                key={trail.slug}
+                id={`trail-card-${trail.slug}`}
+                onMouseEnter={() => handleCardHover(trail.slug)}
+                onMouseLeave={() => handleCardHover(null)}
+                onClick={() => handleTrailClick(trail.slug)}
+                className={`group cursor-pointer rounded-xl p-3.5 transition-all duration-150 ${
+                  hoveredTrail === trail.slug
+                    ? "bg-white/[0.08] ring-1 ring-white/10"
+                    : "hover:bg-white/[0.04]"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex items-center gap-2">
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{
+                          backgroundColor: DIFFICULTY_COLORS[trail.difficulty],
+                        }}
+                      />
+                      <h3
+                        className={`truncate text-sm font-semibold transition ${
+                          hoveredTrail === trail.slug
+                            ? "text-white"
+                            : "text-neutral-200 group-hover:text-white"
+                        }`}
+                      >
+                        {trail.name}
+                      </h3>
+                      {trail.passport_peak && (
+                        <span
+                          className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+                            trail.passport_tier === "bronze"
+                              ? "bg-amber-500/10 text-amber-400"
+                              : trail.passport_tier === "silver"
+                                ? "bg-neutral-400/10 text-neutral-300"
+                                : "bg-yellow-500/10 text-yellow-400"
+                          }`}
+                        >
+                          {trail.passport_tier}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-3 text-xs text-neutral-500">
+                      <span>{trail.distance_km} km</span>
+                      <span className="text-neutral-700">&middot;</span>
+                      <span>{trail.elevation_gain_m}m gain</span>
+                      <span className="text-neutral-700">&middot;</span>
+                      <span>~{trail.estimated_hours}h</span>
+                    </div>
+
+                    {/* Mini elevation sparkline */}
+                    <div className="mt-2 flex h-6 items-end gap-px">
+                      {trail.elevation_profile.map((elev, i) => {
+                        const min = Math.min(...trail.elevation_profile);
+                        const max = Math.max(...trail.elevation_profile);
+                        const range = max - min || 1;
+                        const height = ((elev - min) / range) * 100;
+                        return (
+                          <div
+                            key={i}
+                            className="flex-1 rounded-t-sm transition-colors"
+                            style={{
+                              height: `${Math.max(height, 8)}%`,
+                              backgroundColor:
+                                hoveredTrail === trail.slug
+                                  ? DIFFICULTY_COLORS[trail.difficulty]
+                                  : `${DIFFICULTY_COLORS[trail.difficulty]}40`,
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Arrow */}
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    className={`mt-0.5 shrink-0 transition ${
+                      hoveredTrail === trail.slug
+                        ? "text-neutral-300"
+                        : "text-neutral-700"
+                    }`}
+                  >
+                    <path
+                      d="M6 4l4 4-4 4"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </div>
               </div>
-            </Link>
-          ))}
-        </div>
-      </section>
+            ))}
 
-      {/* Footer */}
-      <footer className="border-t border-white/5 py-12">
-        <div className="mx-auto max-w-7xl px-6 text-center text-sm text-neutral-600">
-          <p>
-            Peaks — Grand Cache Trail Explorer. Trail data sourced from Alberta
-            Open Data, OpenStreetMap, and community contributions.
+            {visibleTrails.length === 0 && (
+              <div className="py-12 text-center text-sm text-neutral-600">
+                No trails in this area.
+                <br />
+                <span className="text-neutral-500">
+                  Zoom out or pan to find trails.
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Selected trail quick info */}
+        {selected && (
+          <div className="shrink-0 border-t border-white/5 bg-[#0d0d0d] p-4">
+            <h3 className="mb-1 text-sm font-semibold text-white">
+              {selected.name}
+            </h3>
+            <p className="mb-3 text-xs text-neutral-500">
+              {selected.distance_km} km &middot; {selected.elevation_gain_m}m
+              gain &middot; ~{selected.estimated_hours}h
+            </p>
+            <Link
+              href={`/trails/${selected.slug}`}
+              className="block w-full rounded-lg bg-blue-600 py-2 text-center text-xs font-medium text-white transition hover:bg-blue-500"
+            >
+              View Trail Details
+            </Link>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="shrink-0 border-t border-white/5 px-4 py-3">
+          <p className="text-[10px] text-neutral-600">
+            Trail data: Alberta Open Data, OpenStreetMap, community GPS tracks
           </p>
         </div>
-      </footer>
+      </div>
+
+      {/* Map */}
+      <div className="flex-1">
+        <Map
+          onTrailClick={handleTrailClick}
+          onTrailHover={handleMapTrailHover}
+          onBoundsChange={handleBoundsChange}
+          hoveredTrail={hoveredTrail}
+          className="h-full w-full"
+        />
+      </div>
     </div>
   );
 }
