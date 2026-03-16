@@ -4,7 +4,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { getTrailBySlug, trails } from "@/data/trails";
-import { DIFFICULTY_COLORS } from "@/lib/types";
+import { DIFFICULTY_COLORS, PASSPORT_TIER_COLORS } from "@/lib/types";
 import { downloadGPX } from "@/lib/gpx";
 
 const ElevationProfile = dynamic(
@@ -104,13 +104,11 @@ export default function TrailPage() {
           <div className="mb-8">
             {trail.passport_peak && trail.passport_tier && (
               <span
-                className={`mb-3 inline-block rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wider ${
-                  trail.passport_tier === "bronze"
-                    ? "bg-amber-500/10 text-amber-400"
-                    : trail.passport_tier === "silver"
-                      ? "bg-neutral-400/10 text-neutral-300"
-                      : "bg-yellow-500/10 text-yellow-400"
-                }`}
+                className="mb-3 inline-block rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wider"
+                style={{
+                  backgroundColor: `${PASSPORT_TIER_COLORS[trail.passport_tier].accent}18`,
+                  color: PASSPORT_TIER_COLORS[trail.passport_tier].text,
+                }}
               >
                 Passport to the Peaks &mdash; {trail.passport_tier}
               </span>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Trail, DIFFICULTY_COLORS } from "@/lib/types";
+import { Trail, DIFFICULTY_COLORS, PASSPORT_TIER_COLORS } from "@/lib/types";
 
 interface TrailCardProps {
   trail: Trail;
@@ -7,6 +7,11 @@ interface TrailCardProps {
 }
 
 export default function TrailCard({ trail, compact = false }: TrailCardProps) {
+  const dotColor =
+    trail.passport_peak && trail.passport_tier
+      ? PASSPORT_TIER_COLORS[trail.passport_tier].accent
+      : DIFFICULTY_COLORS[trail.difficulty];
+
   return (
     <Link
       href={`/trails/${trail.slug}`}
@@ -16,13 +21,11 @@ export default function TrailCard({ trail, compact = false }: TrailCardProps) {
         <div className="flex-1">
           {trail.passport_peak && trail.passport_tier && (
             <span
-              className={`mb-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
-                trail.passport_tier === "bronze"
-                  ? "bg-amber-500/10 text-amber-400"
-                  : trail.passport_tier === "silver"
-                    ? "bg-neutral-400/10 text-neutral-300"
-                    : "bg-yellow-500/10 text-yellow-400"
-              }`}
+              className="mb-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
+              style={{
+                backgroundColor: `${PASSPORT_TIER_COLORS[trail.passport_tier].accent}18`,
+                color: PASSPORT_TIER_COLORS[trail.passport_tier].text,
+              }}
             >
               {trail.passport_tier} peak
             </span>
@@ -42,9 +45,7 @@ export default function TrailCard({ trail, compact = false }: TrailCardProps) {
         <div className="flex items-center gap-1.5">
           <span
             className="h-2 w-2 rounded-full"
-            style={{
-              backgroundColor: DIFFICULTY_COLORS[trail.difficulty],
-            }}
+            style={{ backgroundColor: dotColor }}
           />
           <span className="capitalize">{trail.difficulty}</span>
         </div>

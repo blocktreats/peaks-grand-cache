@@ -35,6 +35,22 @@ export const DIFFICULTY_COLORS: DifficultyColor = {
   expert: "#ef4444",
 };
 
+// Passport tier colors — intentionally very distinct
+// Bronze: warm copper    Gold: bright luminous yellow    Silver: cool steel blue
+export const PASSPORT_TIER_COLORS = {
+  bronze: { bg: "#92400e", text: "#fbbf24", accent: "#B87333", label: "Bronze" },
+  silver: { bg: "#1e293b", text: "#94a3b8", accent: "#94A3B8", label: "Silver" },
+  gold: { bg: "#713f12", text: "#fde047", accent: "#FFD700", label: "Gold" },
+} as const;
+
+// Trail line colors on the map — passport peaks override difficulty colors
+export function getTrailColor(trail: Trail): string {
+  if (trail.passport_peak && trail.passport_tier) {
+    return PASSPORT_TIER_COLORS[trail.passport_tier].accent;
+  }
+  return DIFFICULTY_COLORS[trail.difficulty];
+}
+
 export const REGION_BOUNDS = {
   north: 54.8,
   south: 53.4,
